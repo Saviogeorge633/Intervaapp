@@ -6,10 +6,10 @@ class TimerCard extends StatelessWidget {
   final EdgeInsetsGeometry padding;
 
   const TimerCard({
-    Key? key,
+    super.key,
     required this.child,
     this.padding = const EdgeInsets.all(16.0),
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

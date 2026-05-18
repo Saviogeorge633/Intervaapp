@@ -29,7 +29,7 @@ void main() async {
 }
 
 class IntervaApp extends StatelessWidget {
-  const IntervaApp({Key? key}) : super(key: key);
+  const IntervaApp({super.key});
 
   @override
   Widget build(BuildContext context) {

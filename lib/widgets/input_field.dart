@@ -10,14 +10,14 @@ class InputField extends StatelessWidget {
   final void Function(String)? onChanged;
 
   const InputField({
-    Key? key,
+    super.key,
     required this.label,
     this.hintText,
     this.controller,
     this.keyboardType,
     this.validator,
     this.onChanged,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

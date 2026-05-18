@@ -8,12 +8,12 @@ class CircularProgressRing extends StatelessWidget {
   final Widget child;
 
   const CircularProgressRing({
-    Key? key,
+    super.key,
     required this.progress,
     required this.activeColor,
     required this.trackColor,
     required this.child,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

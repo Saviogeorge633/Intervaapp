@@ -12,8 +12,14 @@ import '../services/timer_service.dart';
 class ActiveTimerScreen extends StatefulWidget {
   final List<TimerInterval> intervals;
   final ActiveSessionState? resumingState;
+  final bool shouldAutoResume; // true = auto-start timer on open (from Resume dialog)
 
-  const ActiveTimerScreen({Key? key, required this.intervals, this.resumingState}) : super(key: key);
+  const ActiveTimerScreen({
+    super.key,
+    required this.intervals,
+    this.resumingState,
+    this.shouldAutoResume = false,
+  });
 
   @override
   _ActiveTimerScreenState createState() => _ActiveTimerScreenState();
@@ -23,22 +29,56 @@ class _ActiveTimerScreenState extends State<ActiveTimerScreen> {
   int _currentIndex = 0;
   int _secondsLeft = 0;
   bool _isPaused = false;
+  bool _needsServiceStart = false;
   StreamSubscription? _updateSub;
   StreamSubscription? _completedSub;
+  StreamSubscription? _stoppedSub;
   
   @override
   void initState() {
     super.initState();
     
+    // Request immediate state from the background service
+    FlutterBackgroundService().invoke('requestUpdate');
+
+    _updateSub = FlutterBackgroundService().on('update').listen((event) {
+      if (event != null && mounted) {
+        final Map<String, dynamic> data = Map<String, dynamic>.from(event);
+        final state = ActiveSessionState.fromJson(Map<String, dynamic>.from(data['state']));
+        setState(() {
+          _currentIndex = state.currentIndex;
+          _secondsLeft = state.secondsLeft;
+          _isPaused = data['isPaused'] ?? false;
+        });
+      }
+    });
+
+    _completedSub = FlutterBackgroundService().on('completed').listen((event) {
+      if (mounted) Navigator.pop(context);
+    });
+
+    _stoppedSub = FlutterBackgroundService().on('stopped').listen((event) {
+      if (mounted) Navigator.pop(context);
+    });
+
     if (widget.resumingState != null) {
       _currentIndex = widget.resumingState!.currentIndex;
       _secondsLeft = widget.resumingState!.secondsLeft;
       
-      FlutterBackgroundService().isRunning().then((isRunning) {
-        if (!isRunning) {
-          TimerService().startSession(widget.resumingState!);
-        }
-      });
+      if (widget.shouldAutoResume) {
+        // Came from the Resume dialog — ensure the timer is running.
+        FlutterBackgroundService().isRunning().then((isRunning) {
+          if (isRunning) {
+            // Service alive but may be paused — unpause it.
+            TimerService().resumeSession();
+          } else {
+            // Service was killed — restart it from the saved position.
+            TimerService().startSession(widget.resumingState!);
+          }
+        });
+      }
+      // If shouldAutoResume is false (mini toolbar tap), preserve whatever
+      // state the service is in — updates arrive via _updateSub.
     } else if (widget.intervals.isNotEmpty) {
       _secondsLeft = widget.intervals[0].durationSeconds;
       
@@ -50,28 +90,13 @@ class _ActiveTimerScreenState extends State<ActiveTimerScreen> {
       
       TimerService().startSession(initialState);
     }
-
-    _updateSub = FlutterBackgroundService().on('update').listen((event) {
-      if (event != null && mounted) {
-        final state = ActiveSessionState.fromJson(Map<String, dynamic>.from(event));
-        setState(() {
-          _currentIndex = state.currentIndex;
-          _secondsLeft = state.secondsLeft;
-        });
-      }
-    });
-
-    _completedSub = FlutterBackgroundService().on('completed').listen((event) {
-      if (mounted) {
-        Navigator.pop(context);
-      }
-    });
   }
 
   @override
   void dispose() {
     _updateSub?.cancel();
     _completedSub?.cancel();
+    _stoppedSub?.cancel();
     super.dispose();
   }
 
@@ -79,6 +104,37 @@ class _ActiveTimerScreenState extends State<ActiveTimerScreen> {
     final min = seconds ~/ 60;
     final sec = seconds % 60;
     return '${min.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
+  }
+
+  void _handlePlayPause() {
+    if (_isPaused) {
+      // Resuming
+      if (_needsServiceStart) {
+        // Service was dead — start it fresh from current position
+        final state = ActiveSessionState(
+          intervals: widget.intervals,
+          currentIndex: _currentIndex,
+          secondsLeft: _secondsLeft,
+        );
+        TimerService().startSession(state);
+        _needsServiceStart = false;
+      } else {
+        TimerService().resumeSession();
+      }
+    } else {
+      // Pausing
+      TimerService().pauseSession();
+    }
+    setState(() { _isPaused = !_isPaused; });
+  }
+
+  void _handleStop() {
+    // Cancel listeners FIRST to prevent double-pop
+    _updateSub?.cancel();
+    _completedSub?.cancel();
+    _stoppedSub?.cancel();
+    TimerService().stopSession();
+    Navigator.pop(context);
   }
 
   @override
@@ -101,9 +157,7 @@ class _ActiveTimerScreenState extends State<ActiveTimerScreen> {
         title: const Text('Active Session'),
         leading: IconButton(
           icon: const Icon(Icons.close),
-          onPressed: () {
-            Navigator.pop(context);
-          },
+          onPressed: () => Navigator.pop(context),
         ),
       ),
       body: Column(
@@ -147,9 +201,7 @@ class _ActiveTimerScreenState extends State<ActiveTimerScreen> {
               IconButton(
                 iconSize: 32,
                 icon: Icon(Icons.skip_previous, color: colors.primaryText),
-                onPressed: () {
-                  TimerService().skipPrevious();
-                },
+                onPressed: () => TimerService().skipPrevious(),
               ),
               const SizedBox(width: 24),
               Container(
@@ -160,29 +212,24 @@ class _ActiveTimerScreenState extends State<ActiveTimerScreen> {
                 child: IconButton(
                   iconSize: 48,
                   icon: Icon(_isPaused ? Icons.play_arrow : Icons.pause, color: Colors.white),
-                  onPressed: () {
-                    setState(() {
-                      _isPaused = !_isPaused;
-                    });
-                    if (_isPaused) {
-                      TimerService().pauseSession();
-                    } else {
-                      TimerService().resumeSession();
-                    }
-                  },
+                  onPressed: _handlePlayPause,
                 ),
               ),
               const SizedBox(width: 24),
               IconButton(
                 iconSize: 32,
                 icon: Icon(Icons.skip_next, color: colors.primaryText),
-                onPressed: () {
-                  TimerService().skipNext();
-                },
+                onPressed: () => TimerService().skipNext(),
               ),
             ],
           ),
-          const SizedBox(height: 40),
+          const SizedBox(height: 16),
+          TextButton.icon(
+            onPressed: _handleStop,
+            icon: Icon(Icons.stop_circle_outlined, color: colors.warning),
+            label: Text("Stop Session", style: TextStyle(color: colors.warning, fontWeight: FontWeight.w600)),
+          ),
+          const SizedBox(height: 16),
           Expanded(
             child: Container(
               width: double.infinity,
@@ -194,10 +241,7 @@ class _ActiveTimerScreenState extends State<ActiveTimerScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    "Up Next",
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
+                  Text("Up Next", style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: 16),
                   Expanded(
                     child: ListView.builder(
@@ -210,25 +254,10 @@ class _ActiveTimerScreenState extends State<ActiveTimerScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                             child: Row(
                               children: [
-                                Container(
-                                  width: 12,
-                                  height: 12,
-                                  decoration: BoxDecoration(
-                                    color: Color(interval.colorValue),
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
+                                Container(width: 12, height: 12, decoration: BoxDecoration(color: Color(interval.colorValue), shape: BoxShape.circle)),
                                 const SizedBox(width: 16),
-                                Expanded(
-                                  child: Text(
-                                    interval.name,
-                                    style: const TextStyle(fontWeight: FontWeight.w600),
-                                  ),
-                                ),
-                                Text(
-                                  _formatTime(interval.durationSeconds),
-                                  style: TextStyle(color: colors.mutedText),
-                                ),
+                                Expanded(child: Text(interval.name, style: const TextStyle(fontWeight: FontWeight.w600))),
+                                Text(_formatTime(interval.durationSeconds), style: TextStyle(color: colors.mutedText)),
                               ],
                             ),
                           ),

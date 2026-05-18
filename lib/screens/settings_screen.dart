@@ -5,7 +5,7 @@ import '../providers/settings_provider.dart';
 import '../theme/app_theme.dart';
 
 class SettingsScreen extends StatelessWidget {
-  const SettingsScreen({Key? key}) : super(key: key);
+  const SettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +51,7 @@ class SettingsScreen extends StatelessWidget {
                 trailing: Switch(
                   value: themeProvider.isDarkMode,
                   onChanged: (val) => themeProvider.toggleTheme(),
-                  activeColor: colors.accent,
+                  activeThumbColor: colors.accent,
                 ),
                 colors: colors,
                 showDivider: false,
@@ -69,7 +69,7 @@ class SettingsScreen extends StatelessWidget {
                 trailing: Switch(
                   value: settingsProvider.isSoundOn,
                   onChanged: (val) => settingsProvider.toggleSound(),
-                  activeColor: colors.accent,
+                  activeThumbColor: colors.accent,
                 ),
                 colors: colors,
                 showDivider: true,
@@ -80,7 +80,7 @@ class SettingsScreen extends StatelessWidget {
                 trailing: Switch(
                   value: settingsProvider.isVibrationOn,
                   onChanged: (val) => settingsProvider.toggleVibration(),
-                  activeColor: colors.accent,
+                  activeThumbColor: colors.accent,
                 ),
                 colors: colors,
                 showDivider: false,

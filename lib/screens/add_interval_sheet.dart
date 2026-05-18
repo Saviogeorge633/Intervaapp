@@ -11,13 +11,13 @@ class AddIntervalSheet extends StatefulWidget {
   final Function(String name, int duration, int color) onSave;
 
   const AddIntervalSheet({
-    Key? key,
+    super.key,
     this.initialId,
     this.initialName,
     this.initialDurationSeconds,
     this.initialColorValue,
     required this.onSave,
-  }) : super(key: key);
+  });
 
   @override
   _AddIntervalSheetState createState() => _AddIntervalSheetState();
@@ -58,7 +58,7 @@ class _AddIntervalSheetState extends State<AddIntervalSheet> {
         left: 20,
         right: 20,
         top: 20,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + MediaQuery.of(context).padding.bottom + 20,
       ),
       decoration: BoxDecoration(
         color: colors.background,
